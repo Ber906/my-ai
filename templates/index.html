@@ -1,0 +1,234 @@
+<!--  -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Autonomous AI</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧠 AUTONOMOUS AI</h1>
+            <p class="subtitle">Self-learning • Web Browsing • No External APIs</p>
+            <div class="stats" id="stats">
+                <span>Knowledge: <b id="knowledge-count">0</b></span>
+                <span>Conversations: <b id="chat-count">0</b></span>
+                <span>Status: <b id="ai-status">Awake</b></span>
+            </div>
+        </header>
+
+        <div class="main-panel">
+            <div class="chat-section">
+                <div class="chat-history" id="chat-history">
+                    <div class="message ai-message">
+                        <div class="bubble">
+                            Yo! Ako ang AI mo. Natututo ako habang nag-uusap tayo. 
+                            Try mong magtanong o magpaturo sa akin!
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="input-area">
+                    <input type="text" id="user-input" 
+                           placeholder="Type your message..." 
+                           autocomplete="off">
+                    <button onclick="sendMessage()" class="send-btn">Send</button>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <div class="section">
+                    <h3>🌐 Web Learning</h3>
+                    <div class="browse-controls">
+                        <input type="text" id="browse-query" 
+                               placeholder="What should I learn about?">
+                        <button onclick="startBrowsing()" class="browse-btn">
+                            Browse & Learn
+                        </button>
+                    </div>
+                    <div id="browse-status" class="status"></div>
+                </div>
+
+                <div class="section">
+                    <h3>📚 Direct Teaching</h3>
+                    <textarea id="teach-text" 
+                              placeholder="Paste text to teach me..."></textarea>
+                    <input type="text" id="teach-topic" 
+                           placeholder="Topic (optional)">
+                    <button onclick="teachAI()" class="teach-btn">Teach</button>
+                </div>
+
+                <div class="section">
+                    <h3>🧠 My Memories</h3>
+                    <div class="memory-search">
+                        <input type="text" id="memory-topic" 
+                               placeholder="Search memories...">
+                        <button onclick="showMemories()">Recall</button>
+                    </div>
+                    <div id="memory-list" class="memory-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatHistory = document.getElementById('chat-history');
+        const userInput = document.getElementById('user-input');
+        
+        // Auto-focus input
+        userInput.focus();
+
+        // Enter to send
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            // Add user message
+            addMessage(text, 'user');
+            userInput.value = '';
+
+            // Show typing indicator
+            const typing = addTyping();
+
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: text})
+                });
+                const data = await res.json();
+                
+                // Remove typing and add response
+                typing.remove();
+                addMessage(data.response, 'ai');
+                
+                // Update stats
+                updateStats(data.stats);
+                
+            } catch (err) {
+                typing.remove();
+                addMessage('Error: ' + err.message, 'ai error');
+            }
+        }
+
+        function addMessage(text, sender) {
+            const div = document.createElement('div');
+            div.className = `message ${sender}-message`;
+            div.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
+            chatHistory.appendChild(div);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            return div;
+        }
+
+        function addTyping() {
+            const div = document.createElement('div');
+            div.className = 'message ai-message typing';
+            div.innerHTML = '<div class="bubble"><span class="dots">...</span></div>';
+            chatHistory.appendChild(div);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            return div;
+        }
+
+        async function startBrowsing() {
+            const query = document.getElementById('browse-query').value;
+            const status = document.getElementById('browse-status');
+            
+            if (!query) return;
+            
+            status.innerHTML = `🔍 Browsing for "${query}"...`;
+            
+            try {
+                const res = await fetch('/api/browse', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({query: query})
+                });
+                const data = await res.json();
+                status.innerHTML = `✅ ${data.message}`;
+                
+                // Refresh stats
+                setTimeout(loadStats, 2000);
+                
+            } catch (err) {
+                status.innerHTML = `❌ Error: ${err.message}`;
+            }
+        }
+
+        async function teachAI() {
+            const text = document.getElementById('teach-text').value;
+            const topic = document.getElementById('teach-topic').value || 'general';
+            
+            if (!text) return;
+            
+            try {
+                const res = await fetch('/api/learn', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({text: text, topic: topic})
+                });
+                
+                document.getElementById('teach-text').value = '';
+                addMessage(`📚 Learned about "${topic}" (${text.length} chars)`, 'ai');
+                loadStats();
+                
+            } catch (err) {
+                alert('Error teaching: ' + err.message);
+            }
+        }
+
+        async function showMemories() {
+            const topic = document.getElementById('memory-topic').value;
+            const list = document.getElementById('memory-list');
+            
+            try {
+                const url = topic ? `/api/memories?topic=${encodeURIComponent(topic)}` : '/api/memories';
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                list.innerHTML = data.memories.map(m => `
+                    <div class="memory-item">
+                        <div class="memory-topic">${escapeHtml(m.topic)}</div>
+                        <div class="memory-content">${escapeHtml(m.content)}...</div>
+                        <div class="memory-meta">Source: ${escapeHtml(m.source)} | Importance: ${m.importance.toFixed(2)}</div>
+                    </div>
+                `).join('');
+                
+            } catch (err) {
+                list.innerHTML = 'Error loading memories';
+            }
+        }
+
+        async function loadStats() {
+            try {
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+                updateStats(data);
+            } catch (err) {
+                console.error('Failed to load stats:', err);
+            }
+        }
+
+        function updateStats(data) {
+            document.getElementById('knowledge-count').textContent = data.knowledge_items;
+            document.getElementById('chat-count').textContent = data.conversations_had;
+            document.getElementById('ai-status').textContent = 
+                data.is_trained ? 'Self-Learning' : 'Learning...';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Load stats on start
+        loadStats();
+    </script>
+</body>
+</html>
